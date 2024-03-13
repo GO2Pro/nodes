@@ -179,6 +179,18 @@ eigenlayer operator register operator.yaml
 
 Confirm with your ECDSA password.
 
+### If you receive an error:
+```bash
+panic: runtime error: invalid memory address or nil pointer dereference
+```
+Solution:
+```bash
+cd /root/eigenlayer-cli/cmd/eigenlayer/
+go get github.com/Layr-Labs/eigensdk-go@v0.1.2
+go build
+```
+Then go back to directory `cd /root/eigenlayer-cli/`, and start operator registration again.
+
 Check your operator registration status.
 ```bash
 eigenlayer operator status operator.yaml
