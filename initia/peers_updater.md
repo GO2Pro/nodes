@@ -104,9 +104,10 @@ update_peers_and_restart() {
 if [ "$OUR_CATCHING_UP" = "false" ]; then
 #	echo "Our server is not catching up. Checking block difference..."
     if [ $CURRENT_DIFF -gt 50 ]; then
-        echo "Updating peers list as the block difference is greater than 50"
+        # Updating peers list as the block difference is greater than 50
         update_peers_and_restart "block difference [$CURRENT_DIFF] is greater than 50"
     else
+        # No action taken.
         echo "Block difference [$CURRENT_DIFF] is not greater than 50. No action taken."
     fi
 elif [ "$OUR_CATCHING_UP" = "true" ]; then
@@ -115,10 +116,11 @@ elif [ "$OUR_CATCHING_UP" = "true" ]; then
         # Collection of peers when the difference increases by 25%
         update_peers_and_restart "block difference [$CURRENT_DIFF] increased by more than 25%"
     elif [ $CURRENT_DIFF -lt $PREVIOUS_DIFF ]; then
-        # When shortening the distance
+        # Shortening the distance, no action taken.
         local reduction=$((PREVIOUS_DIFF - CURRENT_DIFF))
         echo "Block difference has decreased by $reduction. Remaining difference is $CURRENT_DIFF."
     else
+        # No action taken.
         echo "Block difference ($CURRENT_DIFF) has not significantly changed. No action taken."
     fi
 fi
