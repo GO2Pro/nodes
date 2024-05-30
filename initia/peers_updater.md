@@ -90,34 +90,37 @@ collect_peers() {
     echo "${all_peers[@]}" | tr ' ' '\n' | sort -u | tr '\n' ','
 }
 
+# Function to update the list of peers and restart the service
+update_peers_and_restart() {
+    local reason=$1
+    PEERS=$(collect_peers "${PEER_URLS[@]}")
+    echo "Updating peers list as the $reason"
+    echo "PEERS=\"$PEERS\""
+    sed -i 's|^persistent_peers *=.*|persistent_peers = "'$PEERS'"|' $HOME/.initia/config/config.toml
+    sudo systemctl restart initiad
+}
+
 # Checking conditions
 if [ "$OUR_CATCHING_UP" = "false" ]; then
 #	echo "Our server is not catching up. Checking block difference..."
-	if [ $CURRENT_DIFF -gt 50 ]; then
-		echo "Updating peers list as the block difference is greater than 50"
-		PEERS=$(collect_peers "${PEER_URLS[@]}")
-		echo "PEERS=\"$PEERS\""
-		sed -i 's|^persistent_peers *=.*|persistent_peers = "'$PEERS'"|' $HOME/.initia/config/config.toml
-		sudo systemctl restart initiad
-	else
-		echo "Block difference ($CURRENT_DIFF) is not greater than 50. No action taken."
-	fi
+    if [ $CURRENT_DIFF -gt 50 ]; then
+        echo "Updating peers list as the block difference is greater than 50"
+        update_peers_and_restart "block difference [$CURRENT_DIFF] is greater than 50"
+    else
+        echo "Block difference [$CURRENT_DIFF] is not greater than 50. No action taken."
+    fi
 elif [ "$OUR_CATCHING_UP" = "true" ]; then
 #	echo "Our server is catching up. Checking block difference changes..."
-	if [ $CURRENT_DIFF -gt $((PREVIOUS_DIFF + (PREVIOUS_DIFF / 25))) ]; then
-		# Collection of peers when the difference increases by 25%
-		PEERS=$(collect_peers "${PEER_URLS[@]}")
-		echo "Updating peers list as the block difference increased by more than 25%"
-		echo "PEERS=\"$PEERS\""
-		sed -i 's|^persistent_peers *=.*|persistent_peers = "'$PEERS'"|' $HOME/.initia/config/config.toml
-		sudo systemctl restart initiad
-	elif [ $CURRENT_DIFF -lt $PREVIOUS_DIFF ]; then
-		# When shortening the distance
-		local reduction=$((PREVIOUS_DIFF - CURRENT_DIFF))
-		echo "Block difference has decreased by $reduction. Remaining difference is $CURRENT_DIFF."
-	else
-		echo "Block difference ($CURRENT_DIFF) has not significantly changed. No action taken."
-	fi
+    if [ $CURRENT_DIFF -gt $((PREVIOUS_DIFF + (PREVIOUS_DIFF / 25))) ]; then
+        # Collection of peers when the difference increases by 25%
+        update_peers_and_restart "block difference [$CURRENT_DIFF] increased by more than 25%"
+    elif [ $CURRENT_DIFF -lt $PREVIOUS_DIFF ]; then
+        # When shortening the distance
+        local reduction=$((PREVIOUS_DIFF - CURRENT_DIFF))
+        echo "Block difference has decreased by $reduction. Remaining difference is $CURRENT_DIFF."
+    else
+        echo "Block difference ($CURRENT_DIFF) has not significantly changed. No action taken."
+    fi
 fi
 
 # Writing the current difference to a file
