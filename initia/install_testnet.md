@@ -337,7 +337,7 @@ cd $HOME
 rm -rf slinky
 git clone https://github.com/skip-mev/slinky.git
 cd slinky
-git checkout v0.4.4
+git checkout v0.4.3
 ```
 ### 10.2. Build Binaries
 ```bash
