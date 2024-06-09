@@ -31,7 +31,7 @@ sudo nano $HOME/_peers_updater/initia_persistent_peers_check.sh
 ```bash
 #!/bin/bash
 
-# Variables for URLs
+# Variables for URLs and thresholds
 INITIA_URL="https://rpc.initiation-1.initia.xyz/status"
 PEER_URLS=(
     "https://initia-testnet-rpc.f5nodes.com/net_info"
@@ -40,22 +40,99 @@ PEER_URLS=(
     "https://initia-testnet-rpc.blacknodes.net/net_info"
     "https://initia-testnet-rpc.go2pro.xyz/net_info"
 )
+BLOCK_DIFF_THRESHOLD=50
+PERCENT_DIFF_THRESHOLD=25
+
+# Function to get the current timestamp in UTC
+get_timestamp() {
+    echo $(date -u +"%Y-%m-%d %H:%M:%S UTC")
+}
+
+# Get the current timestamp
+timestamp=$(get_timestamp)
 
 # Function to get latest_block_height and catching_up values
 get_block_info() {
     local url=$1
     local response=$(curl -s $url)
-    local latest_block_height=$(echo $response | jq -r '.result.sync_info.latest_block_height')
-    local catching_up=$(echo $response | jq -r '.result.sync_info.catching_up')
-    echo "$latest_block_height $catching_up"
+    
+    # Check if the response is valid JSON
+    if echo "$response" | jq empty 2>/dev/null; then
+        local latest_block_height=$(echo $response | jq -r '.result.sync_info.latest_block_height')
+        local catching_up=$(echo $response | jq -r '.result.sync_info.catching_up')
+        echo "$latest_block_height $catching_up"
+    else
+        echo "Error: Invalid JSON response from $url" >&2
+        echo "0 false"  # Default values in case of an error
+    fi
 }
 
-# Function to get latest_block_height and catching_up values from our server
+# Function to get latest_block_height and catching_up values from our server with retry mechanism
 get_our_block_info() {
-    local status=$($HOME/go/bin/initiad status | jq -r '.sync_info')
-    local latest_block_height=$(echo $status | jq -r '.latest_block_height')
-    local catching_up=$(echo $status | jq -r '.catching_up')
-    echo "$latest_block_height $catching_up"
+    local status
+    local retries=3
+    local count=0
+
+    while [ $count -lt $retries ]; do
+        status=$($HOME/go/bin/initiad status 2>&1)
+        
+        # Check for connection timeout error
+        if echo "$status" | grep -q "dial tcp .* connect: connection timed out"; then
+            echo "Error: Connection timed out. Restarting initiad service." >&2
+            sudo systemctl restart initiad
+            echo "0 false"  # Default values in case of an error
+            return
+        fi
+        
+        # Check if the status is valid JSON
+        if echo "$status" | jq empty 2>/dev/null; then
+            local sync_info=$(echo "$status" | jq -r '.sync_info')
+            local latest_block_height=$(echo $sync_info | jq -r '.latest_block_height')
+            local catching_up=$(echo $sync_info | jq -r '.catching_up')
+            echo "$latest_block_height $catching_up"
+            return 0
+        else
+            echo "Error: Failed to parse JSON response from initiad status. Attempt $((count + 1)) of $retries." >&2
+            count=$((count + 1))
+            sleep 5  # Wait before retrying
+        fi
+    done
+
+    # If all retries fail, restart the service
+    echo "Error: Unable to connect to initiad after $retries attempts. Restarting the service." >&2
+    sudo systemctl restart initiad
+    echo "0 false"  # Default values in case of an error
+}
+
+# Function for collecting peers from multiple URLs
+collect_peers() {
+    local urls=("$@")
+    local all_peers=()
+
+    for url in "${urls[@]}"; do
+        local response=$(curl -s $url)
+        
+        # Check if the response is valid JSON
+        if echo "$response" | jq empty 2>/dev/null; then
+            local peers=$(echo $response | jq -r '.result.peers[] | "\(.node_info.id)@\(.remote_ip):" + (.node_info.listen_addr | capture("(?<ip>.+):(?<port>[0-9]+)$").port)')
+            all_peers+=($peers)
+        else
+            echo "Error: Invalid JSON response from $url" >&2
+        fi
+    done
+
+    # Removing duplicates
+    echo "${all_peers[@]}" | tr ' ' '\n' | sort -u | tr '\n' ','
+}
+
+# Function to update peers and restart the service
+update_peers_and_restart() {
+    local reason=$1
+    PEERS=$(collect_peers "${PEER_URLS[@]}")
+    echo "$timestamp Updating peers list as the $reason"
+    #echo "PEERS=\"$PEERS\""
+    sed -i 's|^persistent_peers *=.*|persistent_peers = "'$PEERS'"|' $HOME/.initia/config/config.toml
+    sudo systemctl restart initiad
 }
 
 # Receiving data from INITIA server
@@ -75,53 +152,21 @@ fi
 # Calculating the current difference
 CURRENT_DIFF=$((INITIA_LATEST_BLOCK_HEIGHT - OUR_LATEST_BLOCK_HEIGHT))
 
-# Function for collecting peers from multiple URLs
-collect_peers() {
-    local urls=("$@")
-    local all_peers=()
-
-    for url in "${urls[@]}"; do
-        local response=$(curl -s $url)
-        local peers=$(echo $response | jq -r '.result.peers[] | "\(.node_info.id)@\(.remote_ip):" + (.node_info.listen_addr | capture("(?<ip>.+):(?<port>[0-9]+)$").port)')
-        all_peers+=($peers)
-    done
-
-    # Removing duplicates
-    echo "${all_peers[@]}" | tr ' ' '\n' | sort -u | tr '\n' ','
-}
-
-# Function to update the list of peers and restart the service
-update_peers_and_restart() {
-    local reason=$1
-    PEERS=$(collect_peers "${PEER_URLS[@]}")
-    echo "Updating peers list as the $reason"
-    echo "PEERS=\"$PEERS\""
-    sed -i 's|^persistent_peers *=.*|persistent_peers = "'$PEERS'"|' $HOME/.initia/config/config.toml
-    sudo systemctl restart initiad
-}
-
 # Checking conditions
 if [ "$OUR_CATCHING_UP" = "false" ]; then
-#	echo "Our server is not catching up. Checking block difference..."
-    if [ $CURRENT_DIFF -gt 50 ]; then
-        # Updating peers list as the block difference is greater than 50
-        update_peers_and_restart "block difference [$CURRENT_DIFF] is greater than 50"
+    if [ $CURRENT_DIFF -gt $BLOCK_DIFF_THRESHOLD ]; then
+        update_peers_and_restart "$timestamp Block difference [$CURRENT_DIFF] is greater than $BLOCK_DIFF_THRESHOLD"
     else
-        # No action taken.
-        echo "Block difference [$CURRENT_DIFF] is not greater than 50. No action taken."
+        echo "$timestamp Block difference [$CURRENT_DIFF] is not greater than $BLOCK_DIFF_THRESHOLD. No action taken."
     fi
 elif [ "$OUR_CATCHING_UP" = "true" ]; then
-#	echo "Our server is catching up. Checking block difference changes..."
-    if [ $CURRENT_DIFF -gt $((PREVIOUS_DIFF + (PREVIOUS_DIFF / 25))) ]; then
-        # Collection of peers when the difference increases by 25%
-        update_peers_and_restart "block difference [$CURRENT_DIFF] increased by more than 25%"
+    if [ $CURRENT_DIFF -gt $((PREVIOUS_DIFF + (PREVIOUS_DIFF / PERCENT_DIFF_THRESHOLD))) ]; then
+        update_peers_and_restart "$timestamp Block difference [$CURRENT_DIFF] increased by more than $PERCENT_DIFF_THRESHOLD%"
     elif [ $CURRENT_DIFF -lt $PREVIOUS_DIFF ]; then
-        # Shortening the distance, no action taken.
-        local reduction=$((PREVIOUS_DIFF - CURRENT_DIFF))
-        echo "Block difference has decreased by $reduction. Remaining difference is $CURRENT_DIFF."
+        reduction=$((PREVIOUS_DIFF - CURRENT_DIFF))
+        echo "$timestamp Block difference [$CURRENT_DIFF] has decreased by $reduction. Remaining difference is $CURRENT_DIFF."
     else
-        # No action taken.
-        echo "Block difference ($CURRENT_DIFF) has not significantly changed. No action taken."
+        echo "$timestamp Block difference [$CURRENT_DIFF] has not significantly changed. No action taken."
     fi
 fi
 
