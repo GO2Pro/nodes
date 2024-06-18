@@ -40,7 +40,7 @@ PEER_URLS=(
     "https://initia-testnet-rpc.blacknodes.net/net_info"
     "https://initia-testnet-rpc.go2pro.xyz/net_info"
 )
-BLOCK_DIFF_THRESHOLD=50
+BLOCK_DIFF_THRESHOLD=2
 PERCENT_DIFF_THRESHOLD=25
 
 # Function to get the current timestamp in UTC
@@ -115,7 +115,13 @@ collect_peers() {
         # Check if the response is valid JSON
         if echo "$response" | jq empty 2>/dev/null; then
             local peers=$(echo $response | jq -r '.result.peers[] | "\(.node_info.id)@\(.remote_ip):" + (.node_info.listen_addr | capture("(?<ip>.+):(?<port>[0-9]+)$").port)')
-            all_peers+=($peers)
+            for peer in $peers; do
+                local ip=$(echo $peer | cut -d '@' -f 2 | cut -d ':' -f 1)
+                # Filter out IPv6 addresses
+                if [[ ! "$ip" =~ .*:.* ]]; then
+                    all_peers+=($peer)
+                fi
+            done
         else
             echo "Error: Invalid JSON response from $url" >&2
         fi
@@ -130,6 +136,7 @@ update_peers_and_restart() {
     local reason=$1
     PEERS=$(collect_peers "${PEER_URLS[@]}")
     echo "$timestamp Updating peers list as the $reason"
+    # Commenting out the following line will prevent it from being logged but will not affect functionality
     #echo "PEERS=\"$PEERS\""
     sed -i 's|^persistent_peers *=.*|persistent_peers = "'$PEERS'"|' $HOME/.initia/config/config.toml
     sudo systemctl restart initiad
@@ -172,7 +179,6 @@ fi
 
 # Writing the current difference to a file
 echo $CURRENT_DIFF > $DIFF_FILE
-
 ```
 #### Make Script Executable
 ```bash
