@@ -83,14 +83,14 @@ node_download_binaries() {
     # Download GETH
     cd $HOME
     echo -e '\n\e[42mDownload GETH\e[0m\n' && sleep 1
-    wget -q --show-progress -O $file_geth.tar.gz $_binaries_aws_story
+    wget -q --show-progress -O $file_geth.tar.gz $_binaries_aws_geth
     root_folder_geth=$(tar -tzf $file_geth.tar.gz | grep -o '^[^/]\+' | uniq)
     tar -xzvf $file_geth.tar.gz && sudo chmod +x $HOME/$root_folder_geth/ && sudo mv $HOME/$root_folder_geth/geth $HOME/go/bin && sudo rm -rf $file_geth.tar.gz && sudo rm -rf $HOME/$root_folder_geth
     geth version
   
     # Download STORY
     echo -e '\n\e[42mDownload STORY\e[0m\n' && sleep 1
-    wget -q --show-progress -O $file_story.tar.gz $_binaries_aws_geth
+    wget -q --show-progress -O $file_story.tar.gz $_binaries_aws_story
     root_folder_story=$(tar -tzf $file_story.tar.gz | grep -o '^[^/]\+' | uniq)
     tar -xzvf $file_story.tar.gz && sudo chmod +x $HOME/$root_folder_story/ && sudo mv $HOME/$root_folder_story/story $HOME/go/bin && sudo rm -rf $file_story.tar.gz && sudo rm -rf $HOME/$root_folder_story
     story version
