@@ -34,7 +34,7 @@ setup_cron() {
 
 
 setup_peer_updated_sh() {
-  wget -q -O $script_dir/$script_name https://raw.githubusercontent.com/GO2Pro/nodes/refs/heads/main/story/peers_checker.sh
+	wget -q -O $script_dir/$script_name https://raw.githubusercontent.com/GO2Pro/nodes/refs/heads/main/story/peers_checker.sh
 }
 
 setup_start
