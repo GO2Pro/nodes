@@ -179,7 +179,7 @@ services:
       - '--path.rootfs=/rootfs'
       - '--path.sysfs=/host/sys'
       - '--collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($$|/)'
-      - '--web.listen-address=$SERVER_IP:$CUSTOM_PORT_EXPORTER'
+      #- '--web.listen-address=$SERVER_IP:$CUSTOM_PORT_EXPORTER'
     ports:
       - '$CUSTOM_PORT_EXPORTER:9100'
     restart: unless-stopped
