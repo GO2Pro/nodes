@@ -192,11 +192,11 @@ EOF
 	docker-compose -f /etc/node-exporter/docker-compose-node-exporter.yml up -d
 }
 
-# GRAFANA SET PROMETHEUS SOURCE
-grafana_set_source() {
+# GRAFANA SET DASHBOARD
+grafana_set_dashboard() {
 	GRAFANA_PAYLOAD=$(cat <<EOF
 {
-    "name": "SP_PROMETHEUS",
+    "name": "Prometheus",
     "type": "prometheus",
     "url": "http://$SERVER_IP:$CUSTOM_PORT_PROMETHEUS",
     "access": "proxy",
@@ -207,13 +207,16 @@ EOF
 )
 
 	# Set Prometheus as a data source
-	curl -s -X POST -H "Content-Type: application/json" -d "$GRAFANA_PAYLOAD" "http://$SERVER_IP:$CUSTOM_PORT_GRAFANA/api/datasources" -u "admin:admin"
-}
-
-# GRAFANA SET DASHBOARD
-grafana_set_dashboard() {
+	RESPONSE_SOURCE=$(curl -s -X POST -H "Content-Type: application/json" -d "$GRAFANA_PAYLOAD" "http://$SERVER_IP:$CUSTOM_PORT_GRAFANA/api/datasources" -u "admin:admin")
+	
+	DATA_SOURCE_UID=$(jq -r '.datasource.uid' <<< "$RESPONSE_SOURCE")
+	
 	# Download dashboard
 	curl -s "https://raw.githubusercontent.com/GO2Pro/nodes/refs/heads/main/story/grafana_story_protocol.json" -o $HOME/grafana_story_protocol.json
+	
+	#sed -i -e "s/\${DS_PROMETHEUS}/$DATA_SOURCE_UID/g" $HOME/grafana_story_protocol.json
+	jq --arg newUid "$DATA_SOURCE_UID" 'walk(if type == "object" and .uid == "VARIABLE_PROMETHEUS" then .uid = $newUid else . end)' $HOME/grafana_story_protocol.json > $HOME/temp.json && mv $HOME/temp.json $HOME/grafana_story_protocol.json
+ 
 
 	GRAFANA_DASHBOARD_PAYLOAD=$(cat <<EOF
 {
@@ -224,9 +227,9 @@ EOF
 )
 
 	# Import Dashboard
-	RESPONSE=$(curl -s -X POST -H "Content-Type: application/json" -d "$GRAFANA_DASHBOARD_PAYLOAD" "http://$SERVER_IP:$CUSTOM_PORT_GRAFANA/api/dashboards/db" -u "admin:admin")
+	RESPONSE_DASHBOARD=$(curl -s -X POST -H "Content-Type: application/json" -d "$GRAFANA_DASHBOARD_PAYLOAD" "http://$SERVER_IP:$CUSTOM_PORT_GRAFANA/api/dashboards/db" -u "admin:admin")
 
-	DASHBOARD_UID=$(jq -r '.uid' <<< "$RESPONSE")
+	DASHBOARD_UID=$(jq -r '.uid' <<< "$RESPONSE_DASHBOARD")
 
 	if [ "$DASHBOARD_UID" != "null" ]; then
 		echo -e "\nYour Grafana Dashboard \e[32minstalled and works\e[39m!"
@@ -247,7 +250,6 @@ setup_metrics() {
 	install_grafana
 	install_prometheus
 	install_node_exporter
-	grafana_set_source
 	grafana_set_dashboard
 }
 
