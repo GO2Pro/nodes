@@ -196,7 +196,7 @@ EOF
 grafana_set_source() {
 	GRAFANA_PAYLOAD=$(cat <<EOF
 {
-    "name": "Prometheus",
+    "name": "SP_PROMETHEUS",
     "type": "prometheus",
     "url": "http://$SERVER_IP:$CUSTOM_PORT_PROMETHEUS",
     "access": "proxy",
