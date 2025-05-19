@@ -196,8 +196,8 @@ BLK=$(echo "$TIP" | jq -r '.result.proven.number')
 PROOF=$(curl -s -X POST -H "Content-Type: application/json" \
   -d "{\"jsonrpc\":\"2.0\",\"method\":\"node_getArchiveSiblingPath\",\"params\":[${BLK},${BLK}],\"id\":1}" http://localhost:8080 | jq -r '.result')
 
-echo -e "${GREEN}Block: ${NC}$BLK"
-echo -e "${GREEN}Proof:${NC} $PROOF"
+echo -e "Block: $BLK"
+echo -e "Proof: $PROOF"
 ```
 
 #### Register Validator
